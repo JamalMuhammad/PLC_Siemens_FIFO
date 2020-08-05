@@ -1,0 +1,181 @@
+FUNCTION_BLOCK "FIFO_Ver01"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Din { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DWord;
+      E { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool := true;
+      RD { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;
+      POP : Int := 0;   // POP=1(standard POP); POP=2(POP+removal of similar elements from array)
+      WD { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;
+      RST { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;
+   END_VAR
+
+   VAR_OUTPUT 
+      Dout { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DWord;
+      EMPTY { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool := true;
+      FULL { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;
+   END_VAR
+
+   VAR 
+      fifo : Array[0..10] of DWord;
+      pr_POP : Int;
+      pr_no_POP : Int;
+      pw : Int;
+      pw_no_POP : Int;
+      i : Int;
+      j : Int;
+      "counter" : Int;
+   END_VAR
+
+   VAR_TEMP 
+      k : Int;
+   END_VAR
+
+   VAR CONSTANT 
+      n : Int := 11;   // total number of elements in fifo array
+   END_VAR
+
+
+BEGIN
+	//****************************EMPTY/FULL_POP
+	IF #POP = 2 OR #POP=1 THEN
+	    #counter := 0;
+	    FOR #k := 0 TO #n DO
+	        IF #fifo[#k] <> 0 THEN
+	            #counter := #counter + 1;
+	        END_IF;
+	    END_FOR;
+	    IF #counter = #n THEN
+	        #FULL := TRUE;
+	    ELSE
+	        #FULL := FALSE;
+	    END_IF;
+	    
+	    IF #counter = 0 THEN
+	        #EMPTY := TRUE;
+	    ELSE
+	        #EMPTY := FALSE;
+	    END_IF;
+	END_IF;
+	
+	
+	//RESET
+	IF #RST THEN
+	    #pw_no_POP := #pr_no_POP;
+	    #FULL := FALSE;
+	    #EMPTY := TRUE;
+	    #Dout := 0;
+	//ENABLE    
+	ELSIF #E THEN
+	    //****************************READ_POP=2
+	    IF NOT #EMPTY AND #POP=2 AND #RD THEN
+	        #Dout := #fifo[0];
+	        
+	        FOR #k := 0 TO #n DO
+	            IF #fifo[#k] = #Dout THEN
+	                #fifo[#k] := 0;
+	            END_IF;
+	        END_FOR;
+	        
+	        FOR #i := 0 TO #n DO
+	            FOR #k := 0 TO #n - 1 DO
+	                IF #fifo[#k] = 0 THEN
+	                    #fifo[#k] := #fifo[#k + 1];
+	                    #fifo[#k + 1] := 0;
+	                END_IF;
+	            END_FOR;
+	        END_FOR;
+	    END_IF;
+	    
+	    
+	    //****************************READ_POP=1
+	    IF NOT #EMPTY AND #POP = 1 AND #RD THEN
+	        #Dout := #fifo[0];
+	        FOR #k := 0 TO #n - 1 DO
+	            #fifo[#k] := #fifo[#k + 1];
+	            #fifo[#k + 1] := 0;
+	        END_FOR;
+	    END_IF;
+	    
+	    
+	    //****************************READ_no POP 
+	    IF NOT #EMPTY AND #POP = 0 AND #RD THEN
+	        #Dout := #fifo[#pr_no_POP];
+	        IF #pr_no_POP >= #n - 1 THEN
+	            #pr_no_POP := 0;
+	        ELSE
+	            #pr_no_POP := #pr_no_POP + 1;
+	        END_IF;
+	        #EMPTY := #pr_no_POP = #pw_no_POP;
+	        #FULL := FALSE;
+	    END_IF;
+	    
+	    
+	    //****************************WRITE_POP    
+	    IF NOT #FULL AND (#POP=1 OR #POP=2) AND #WD THEN
+	        #counter := 0;
+	        FOR #k := 0 TO #n DO
+	            IF #fifo[#k] <> 0 THEN
+	                #counter := #counter + 1;
+	            END_IF;
+	        END_FOR;
+	      
+	        #fifo[#counter] := #Din;
+	        #pw := #counter+1;
+	    END_IF;
+	    
+	    
+	    //****************************WRITE_no POP
+	    IF NOT #FULL AND #WD THEN
+	        #fifo[#pw_no_POP] := #Din;
+	        IF #pw_no_POP >= #n - 1 THEN
+	            #pw_no_POP := 0;
+	        ELSE
+	            #pw_no_POP := #pw_no_POP + 1;
+	        END_IF;
+	        #FULL := #pw_no_POP = #pr_no_POP;
+	        #EMPTY := FALSE;
+	    END_IF;
+	    
+	END_IF;
+	
+	
+END_FUNCTION_BLOCK
+
+
+**************************************************************************
+DATA_BLOCK "GlobalDB_01"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+   VAR 
+      "FIFO_Ver01_IDB_IN/OUT" : "FIFO_IO";
+      "FIFO_Ver01_IDB_IN/OUT_1" : "FIFO_IO";
+   END_VAR
+
+
+BEGIN
+
+END_DATA_BLOCK
+
+
+
+**************************************************************************
+TYPE "FIFO_IO"
+VERSION : 0.1
+   STRUCT
+      Din { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DWord;
+      E { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool := true;
+      RD { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;
+      WD { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;
+      RST { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;
+      Dout { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DWord;
+      EMPTY { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool := true;
+      FULL : Bool;
+      RD_Trigger : Bool;
+      WD_Trigger : Bool;
+   END_STRUCT;
+
+END_TYPE
+
+
